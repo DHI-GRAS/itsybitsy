@@ -1,11 +1,10 @@
-try:
-    import asyncio
-    del asyncio
-    HAS_ASYNCIO = True
-except ImportError:
-    HAS_ASYNCIO = False
+import sys
 
-import itsybitsy.sequential
-import itsybitsy.multithreaded
-if HAS_ASYNCIO:
-    import itsybitsy.async
+HAS_ASYNC = sys.version_info >= (3, 5)
+
+if HAS_ASYNC:
+    import itsybitsy.spider.async
+    crawl = itsybitsy.spider.async.crawl
+else:
+    import itsybitsy.spider.multithreaded
+    crawl = itsybitsy.spider.multithreaded.crawl

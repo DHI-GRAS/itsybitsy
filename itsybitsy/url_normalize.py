@@ -152,4 +152,4 @@ def url_normalize(url, charset='utf-8'):
     if url.endswith("#") and query == "" and fragment == "":
         path += "#"
 
-return urlunsplit((scheme, auth, path, query, fragment))
+    return urlunsplit((scheme, auth, path, query, fragment))
