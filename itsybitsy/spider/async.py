@@ -10,10 +10,11 @@ logger = logging.getLogger("itsybitsy")
 
 
 def crawl(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=600, strip_fragments=True, max_connections=100, session=None):
+    lock = asyncio.Semaphore(max_connections)
     loop = asyncio.get_event_loop()
 
     if session is None:
-        connector = aiohttp.TCPConnector(limit=max_connections)
+        connector = aiohttp.TCPConnector(limit=None, verify_ssl=False)
         session = aiohttp.ClientSession(connector=connector, loop=loop)
         close_session = True
     else:
@@ -31,12 +32,13 @@ def crawl(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=60
             num_retries = 0
             while True: # retry on failure
                 try:
-                    async with session.get(page_url, timeout=timeout) as response:
-                        if "text/html" not in response.headers["content-type"]:
-                            return []
-                        html = await response.read()
-                        real_page_url = str(response.url)
-                        break
+                    async with lock:
+                        async with session.get(page_url) as response:
+                            if "text/html" not in response.headers.get("content-type", ""):
+                                return []
+                            html = await response.read()
+                            real_page_url = str(response.url)
+                            break
 
                 except (asyncio.TimeoutError, aiohttp.ClientError) as e:
                     if max_retries and num_retries < max_retries:
@@ -46,6 +48,13 @@ def crawl(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=60
                         warnings.warn("Error when querying %s: %s" % (page_url, repr(e)))
                         return []
 
+                except ValueError:
+                    warnings.warn("encountered malformed link: %s" % page_url)
+                    return []
+
+            if not html:
+                return []
+                
             new_links = []
             for link in util.get_all_valid_links(html, base_url=real_page_url):
                 if only_go_deeper and not util.url_is_deeper(link, real_base_url):
@@ -56,7 +65,6 @@ def crawl(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=60
                     continue
                 visited.add(link)
                 new_links.append(link)
-                #print(">>> add link {} (found in {})".format(link, page_url))
             return new_links
 
         links_to_process = [real_base_url]
@@ -74,6 +82,7 @@ def crawl(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=60
                 yield from new_items
 
             current_depth += 1
+
     finally:
         if close_session:
             session.close()

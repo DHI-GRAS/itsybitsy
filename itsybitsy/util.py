@@ -2,10 +2,13 @@ try:
     import urlparse
 except ImportError:
     from urllib import parse as urlparse
+import logging
 
 import lxml.html
 
 from itsybitsy.url_normalize import url_normalize
+
+logger = logging.getLogger("itsybitsy")
 
 
 def strip_fragments(url):
@@ -22,7 +25,7 @@ def link_is_http(url):
 
 def normalize_url(url):
     if is_relative_link(url):
-        raise ValueError("cannot normalize relative path")
+        raise ValueError("cannot normalize relative path: %s" % url)
     return url_normalize(url)
 
 
@@ -45,7 +48,11 @@ def get_all_valid_links(html, base_url, convert_to_absolute=True, only_http=True
             link = urlparse.urljoin(base_url, link)
         if only_http and not link_is_http(link):
             continue
-        link = normalize_url(link)
+        try:
+            link = normalize_url(link)
+        except ValueError:
+            logger.info("encountered malformed link: %s" % link)
+            continue
         yield link
 
 

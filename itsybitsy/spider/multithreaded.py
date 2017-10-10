@@ -1,6 +1,7 @@
 import threading
 import warnings
 import logging
+from contextlib import closing
 try: # python 3
     import queue
 except ImportError: # python 2
@@ -35,7 +36,7 @@ def crawl(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=10
         close_session = False
 
     try:
-        with session.get(base_url) as response:
+        with closing(session.get(base_url)) as response:
             real_base_url = str(response.url)
         yield real_base_url
 
