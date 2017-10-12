@@ -30,8 +30,18 @@ from __future__ import unicode_literals
 
 import re
 import unicodedata
-from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
+try: # python 3
+    from urllib.parse import quote, unquote, urlsplit, urlunsplit
+except ImportError: # python 2
+    from urllib import quote, unquote
+    from urlparse import urlsplit, urlunsplit
+
+try:
+    unicode
+except NameError:
+    unicode = str
+    
 __license__ = "Python"
 __version__ = "1.3.3"
 
@@ -44,7 +54,7 @@ def _clean(string, charset='utf-8'):
         string : an unquoted and normalized string
     """
     string = unquote(string)
-    return unicodedata.normalize('NFC', string).encode(charset)
+    return unicodedata.normalize('NFC', unicode(string)).encode(charset)
 
 DEFAULT_PORT = {
     'ftp': 21,

@@ -9,10 +9,11 @@ on `asyncio` and `aiohttp` that is only compatible with Python 3.5 and above, an
 versions.
 
 The requirements of `itsybitsy` are thus dependent on which Python version you intend
-to use. For Python 3.5, you will have to install `aiohttp` and `lxml`, e.g. via
+to use. For Python 3.5 and above, you will have to install `aiohttp`, `async_generator`,
+and `lxml`, e.g. via
 
 ```
-pip install aiohttp aiodns cchardet lxml
+pip install aiohttp aiodns cchardet lxml async_generator
 ```
 
 For the multithreaded version, you need to install `requests` and `lxml` via
@@ -23,4 +24,6 @@ pip install requests lxml
 
 ## Usage
 
-`itsibitsy` provides a single function, `crawl`.
+`itsibitsy` provides a single function, `crawl`. The asynchronous version of the
+crawler also supplies a coroutine called `crawl_async` that you can use inside
+`async for` from other coroutines.

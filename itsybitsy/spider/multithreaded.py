@@ -7,9 +7,11 @@ try: # python 3
 except ImportError: # python 2
     import Queue as queue
 
+import lxml.html
 import requests
 
 from itsybitsy import util
+from itsybitsy.url_normalize import url_normalize
 
 logger = logging.getLogger("itsybitsy")
 
@@ -18,16 +20,37 @@ class StopCrawling(Exception):
     pass
 
 
-def crawl(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=10, strip_fragments=True, max_connections=100, session=None):
-    """
-    Arguments
-    ---------
+def crawl(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=10,
+          strip_fragments=True, max_connections=100, session=None):
+    """Multi-threaded implementation of the itsybitsy web crawler.
 
-    Known issues
-    ------------
-    - When using max_depth and multiple threads, some pages that
-      can be reached through multiple paths might get excluded
-    - There are no guarantees on a particular ordering
+    For use with Python versions below 3.5.
+
+    Parameters
+    ---------
+    base_url : str
+        Starting point for crawler
+    only_go_deeper : bool
+        Only visit links that start with the same path as the base url (default: True)
+    max_depth : int
+        Maximum depth from base_url to visit (default: 5)
+    max_retries : int
+        Maximum number of retries when sending GET requests (default: 10)
+    timeout : float
+        Timeout in seconds when sending GET requests (default: 10)
+    strip_fragments : bool
+        Treat URLs that only differ in fragments (such as `test.html#hi` and
+        `test.html#hello`) as equal (default: True)
+    max_connections : int
+        Maximum number of concurrent connections (default: 100)
+    session : requests.Session
+        Session to use for sending requests (default: create a new session)
+
+    Note
+    ----
+    By switching to Python 3.5 or above, you can instead use our awesome
+    asynchronous crawler based on asyncio and aiohttp!
+
     """
     if session is None:
         session = requests.Session()
@@ -37,20 +60,19 @@ def crawl(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=10
 
     try:
         with closing(session.get(base_url)) as response:
-            real_base_url = str(response.url)
-        yield real_base_url
+            base_url = url_normalize(str(response.url))
+        yield base_url
 
         # holds all pages to be crawled and their distance from the base
         page_queue = queue.Queue()
         page_queue.put((base_url,0))
 
         # set to check which sites have been visited already
-        visited = set([real_base_url])
+        visited = set([base_url])
         visited_lock = threading.Lock()
 
         # second queue to be yielded from
         found_urls = queue.Queue()
-        found_urls.put(base_url)
 
         def visit_link():
             page_url, page_depth = page_queue.get()
@@ -83,8 +105,14 @@ def crawl(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=10
                             warnings.warn("Error when querying %s: %s" % (page_url, e))
                             return
 
-                for link in util.get_all_valid_links(html, base_url=real_page_url):
-                    if only_go_deeper and not util.url_is_deeper(link, real_base_url):
+                if not html:
+                    return
+
+                dom = lxml.html.fromstring(html)
+                page_base_url = util.get_base_from_dom(dom, real_page_url)
+
+                for link in util.get_all_valid_links_from_dom(dom, base_url=page_base_url):
+                    if only_go_deeper and not util.url_is_deeper(link, base_url):
                         continue
                     if strip_fragments:
                         link = util.strip_fragments(link)
@@ -105,7 +133,6 @@ def crawl(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=10
                     visit_link()
                 except StopCrawling:
                     break
-
 
         if max_connections:
             try:
@@ -131,6 +158,7 @@ def crawl(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=10
                 visit_link()
                 while not found_urls.empty():
                     yield found_urls.get()
+
     finally:
         if close_session:
             session.close()
