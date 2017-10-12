@@ -6,15 +6,25 @@ A minimal, concurrent web scraper for Python
 `itsybitsy` features two implementations of the same crawling algorithm: One based
 on `asyncio` and `aiohttp` that is only compatible with Python 3.5 and above, and a
 `requests`-based, multithreaded implementation that is supported by most other Python
-versions.
+versions. The requirements for `itsybitsy` are thus dependent on which Python version
+you intend to use.
 
-The requirements of `itsybitsy` are thus dependent on which Python version you intend
-to use. For Python 3.5 and above, you will have to install `aiohttp`, `async_generator`,
+### Python 3.5 and above
+
+For the asynchronous version, you will have to install `aiohttp`, `async_generator`,
 and `lxml`, e.g. via
 
 ```
-pip install aiohttp aiodns cchardet lxml async_generator
+pip install aiohttp lxml async_generator
 ```
+
+It is also recommended to install `cchardet` and `aiodns` for increased performance:
+
+```
+pip install aiodns cchardet
+```
+
+### Below Python 3.5
 
 For the multithreaded version, you need to install `requests` and `lxml` via
 
