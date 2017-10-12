@@ -27,3 +27,8 @@ pip install requests lxml
 `itsibitsy` provides a single function, `crawl`. The asynchronous version of the
 crawler also supplies a coroutine called `crawl_async` that you can use inside
 `async for` from other coroutines.
+
+## Legal
+
+`itsybitsy` contains a modified version of [`url_normalize`](https://github.com/niksite/url-normalize)
+by Nikolay Panov, published under the PSF license.
