@@ -2,11 +2,9 @@ import asyncio
 import warnings
 import logging
 import functools
-import concurrent.futures
 
 import aiohttp
 import lxml.html
-from async_generator import async_generator, yield_, yield_from_
 
 from itsybitsy import util
 from itsybitsy.url_normalize import url_normalize
@@ -14,9 +12,8 @@ from itsybitsy.url_normalize import url_normalize
 logger = logging.getLogger("itsybitsy")
 
 
-@async_generator
 async def crawl_async(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=10,
-          strip_fragments=True, max_connections=100, session=None):
+                      strip_fragments=True, max_connections=100, session=None, normalize=True):
     """A powerful, asynchronous webcrawler based on asyncio and aiohttp.
 
     Parameters
@@ -56,38 +53,51 @@ async def crawl_async(base_url, only_go_deeper=True, max_depth=5, max_retries=10
         close_session = False
 
     try:
-        async with session.get(base_url) as response:
-            base_url = url_normalize(str(response.url))
+        if normalize:
+            async with session.get(base_url) as response:
+                base_url = url_normalize(str(response.url))
 
-        await yield_(base_url)
+        yield base_url
 
         visited = set([base_url])
 
         async def get_all_links(page_url, page_depth):
-            logger.debug("Visiting %s" % page_url)
+            logger.debug("Visiting %s", page_url)
             retry = True
             num_retries = 0
-            while retry: # retry on failure
+            while retry:  # retry on failure
                 try:
                     async with lock:
                         async with session.get(page_url, timeout=timeout) as response:
-                            response.raise_for_status()
+                            try:
+                                response.raise_for_status()
+                            except aiohttp.ClientError as e:
+                                if max_retries and num_retries < max_retries:
+                                    num_retries += 1
+                                    logger.debug("Encountered error: %s - retrying (%d/%d)",
+                                                 e, num_retries, max_retries)
+                                    continue
+                                else:
+                                    warnings.warn("Error when querying %s: %s"
+                                                  % (page_url, repr(e)))
+                                    return []
                             if "text/html" not in response.headers.get("content-type", ""):
                                 return []
                             html = await response.read()
                             real_page_url = str(response.url)
                             retry = False
 
-                except (asyncio.TimeoutError, aiohttp.ClientError) as e:
+                except asyncio.TimeoutError as e:
                     if max_retries and num_retries < max_retries:
                         num_retries += 1
-                        logger.debug("Encountered error: %s - retrying (%d/%d)" % (e, num_retries, max_retries))
+                        logger.debug("Encountered error: %s - retrying (%d/%d)",
+                                     e, num_retries, max_retries)
                     else:
                         warnings.warn("Error when querying %s: %s" % (page_url, repr(e)))
                         return []
 
-                except ValueError:
-                    warnings.warn("encountered malformed link: %s" % page_url)
+                except Exception:
+                    warnings.warn("Critical error when fetching: %s" % page_url)
                     return []
 
             if not html:
@@ -97,7 +107,9 @@ async def crawl_async(base_url, only_go_deeper=True, max_depth=5, max_retries=10
             page_base_url = util.get_base_from_dom(dom, real_page_url)
 
             new_links = []
-            for link in util.get_all_valid_links_from_dom(dom, base_url=page_base_url):
+            all_links = list(util.get_all_valid_links_from_dom(dom, base_url=page_base_url))
+            logger.debug("Found %d links" % len(all_links))
+            for link in all_links:
                 if only_go_deeper and not util.url_is_deeper(link, base_url):
                     continue
                 if strip_fragments:
@@ -108,7 +120,6 @@ async def crawl_async(base_url, only_go_deeper=True, max_depth=5, max_retries=10
                 new_links.append((link, page_depth+1))
 
             return new_links
-
 
         links_to_process = [(base_url, 1)]
         tasks_pending = set()
@@ -124,7 +135,8 @@ async def crawl_async(base_url, only_go_deeper=True, max_depth=5, max_retries=10
             for future in tasks_done:
                 new_links = future.result()
                 links_to_process.extend(new_links)
-                await yield_(new_links)
+                for link, _ in new_links:
+                    yield link
 
     finally:
         if close_session:
