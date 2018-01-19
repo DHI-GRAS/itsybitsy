@@ -10,7 +10,7 @@ else:
 
 setup(
       name='itsybitsy',
-      version='0.1',
+      version='0.2',
       description='A minimal, concurrent web scraper for Python',
       author='Dion Häfner',
       author_email='dimh@dhigroup.com',
