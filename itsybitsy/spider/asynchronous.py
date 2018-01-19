@@ -13,7 +13,7 @@ logger = logging.getLogger("itsybitsy")
 
 
 async def crawl_async(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=10,
-                      strip_fragments=True, max_connections=100, session=None, normalize=True):
+                      strip_fragments=True, max_connections=100, session=None, auth=None):
     """A powerful, asynchronous webcrawler based on asyncio and aiohttp.
 
     Parameters
@@ -35,6 +35,8 @@ async def crawl_async(base_url, only_go_deeper=True, max_depth=5, max_retries=10
         Maximum number of concurrent connections (default: 100)
     session : aiohttp.Session
         Session to use for sending requests (default: create a new session)
+    auth : tuple
+        Authentication object used when opening a session (has no effect when session is given)
 
     Note
     ----
@@ -47,15 +49,19 @@ async def crawl_async(base_url, only_go_deeper=True, max_depth=5, max_retries=10
 
     if session is None:
         connector = aiohttp.TCPConnector(limit=None, verify_ssl=False)
-        session = aiohttp.ClientSession(connector=connector)
+        if auth is None:
+            session = aiohttp.ClientSession(connector=connector)
+        else:
+            session = aiohttp.ClientSession(connector=connector, auth=aiohttp.BasicAuth(*auth))
         close_session = True
-    else:
+    elif isinstance(session, aiohttp.ClientSession):
         close_session = False
+    else:
+        raise TypeError('session argument must be aiohttp.ClientSession object')
 
     try:
-        if normalize:
-            async with session.get(base_url) as response:
-                base_url = url_normalize(str(response.url))
+        async with session.get(base_url) as response:
+            base_url = url_normalize(str(response.url))
 
         yield base_url
 
@@ -150,7 +156,7 @@ def crawl(*args, **kwargs):
     try:
         while True:
             link = crawler.__anext__()
-            yield from loop.run_until_complete(link)
+            yield loop.run_until_complete(link)
     except StopAsyncIteration:
         raise StopIteration
     finally:

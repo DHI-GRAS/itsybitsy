@@ -1,10 +1,10 @@
 import threading
 import warnings
 import logging
-from contextlib import closing
-try: # python 3
+
+try:  # python 3
     import queue
-except ImportError: # python 2
+except ImportError:  # python 2
     import Queue as queue
 
 import lxml.html
@@ -21,7 +21,7 @@ class StopCrawling(Exception):
 
 
 def crawl(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=10,
-          strip_fragments=True, max_connections=100, session=None):
+          strip_fragments=True, max_connections=100, session=None, auth=None):
     """Multi-threaded implementation of the itsybitsy web crawler.
 
     For use with Python versions below 3.5.
@@ -45,6 +45,8 @@ def crawl(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=10
         Maximum number of concurrent connections (default: 100)
     session : requests.Session
         Session to use for sending requests (default: create a new session)
+    auth : tuple
+        Authentication object used when opening a session (has no effect when session is given)
 
     Note
     ----
@@ -54,18 +56,22 @@ def crawl(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=10
     """
     if session is None:
         session = requests.Session()
+        if auth:
+            session.auth = auth
         close_session = True
-    else:
+    elif isinstance(session, requests.Session):
         close_session = False
+    else:
+        raise TypeError('session argument must be requests.Session object')
 
     try:
-        with closing(session.get(base_url)) as response:
+        with session.get(base_url, stream=True) as response:
             base_url = url_normalize(str(response.url))
         yield base_url
 
         # holds all pages to be crawled and their distance from the base
         page_queue = queue.Queue()
-        page_queue.put((base_url,0))
+        page_queue.put((base_url, 0))
 
         # set to check which sites have been visited already
         visited = set([base_url])
@@ -85,7 +91,7 @@ def crawl(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=10
                 logger.debug("Visiting %s" % page_url)
 
                 num_retries = 0
-                while True: # retry on failure
+                while True:  # retry on failure
                     try:
                         with session.get(page_url, stream=True, timeout=timeout) as response:
                             response.raise_for_status()
@@ -126,7 +132,6 @@ def crawl(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=10
             finally:
                 page_queue.task_done()
 
-
         def crawl_forever():
             while True:
                 try:
@@ -149,9 +154,9 @@ def crawl(base_url, only_go_deeper=True, max_depth=5, max_retries=10, timeout=10
                     except queue.Empty:
                         pass
                 main_thread.join()
-            finally: # stop worker threads
+            finally:  # stop worker threads
                 for _ in range(max_connections):
-                    page_queue.put((None,None))
+                    page_queue.put((None, None))
 
         else:
             while not page_queue.empty():
