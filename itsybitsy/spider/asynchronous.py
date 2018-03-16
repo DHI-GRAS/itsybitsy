@@ -146,7 +146,7 @@ async def crawl_async(base_url, only_go_deeper=True, max_depth=5, max_retries=10
 
     finally:
         if close_session:
-            session.close()
+            await session.close()
 
 
 @functools.wraps(crawl_async)
