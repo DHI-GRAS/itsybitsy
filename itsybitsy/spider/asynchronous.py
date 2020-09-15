@@ -158,6 +158,6 @@ def crawl(*args, **kwargs):
             link = crawler.__anext__()
             yield loop.run_until_complete(link)
     except StopAsyncIteration:
-        raise StopIteration
+        return
     finally:
         loop.run_until_complete(crawler.aclose())
